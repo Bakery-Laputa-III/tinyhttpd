@@ -22,7 +22,7 @@ $(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET_WITH_PATH): $(OBJS_WITH_PATH) | $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lpthread
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
