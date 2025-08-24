@@ -1,3 +1,4 @@
+/*TINYHTTPD: craeted by Bakery on 2025/8/24*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +15,7 @@
 #include <signal.h>
 #include <sys/time.h>
 
+
 #define PORT 8080
 #define BACKLOG 10
 #define BUFFER_SIZE 4096
@@ -22,14 +24,30 @@
 #define CONNECTION_TIMEOUT 30
 #define MAX_CLIENTS 100
 
+
 typedef struct {
     int client_socket;
     struct sockaddr_in client_addr;
 } client_info_t;
 
+
+const char* get_mime_type(const char* file_path);
+void send_response(int client_socket, const char* status_code, const char* content_type, const char* body, size_t body_length);
+void send_error_response(int client_socket, int error_code);
+void url_decode(char* dst, const char* src, size_t dst_size);
+void handle_get_request(int client_socket, const char* request_path, const char* root_dir);
+void* handle_client(void* arg);
+void signal_handler(int sig);
+
+
+/**
+ * @brief 根据文件扩展名获取对应的MIME类型
+ * @param file_path 文件路径
+ * @return const char* 返回对应的MIME类型字符串
+ */
 const char* get_mime_type(const char* file_path) {
     const char* ext = strrchr(file_path, '.');
-    if (!ext) return "text/plain";
+    if (ext == NULL) return "text/plain";
     
     if (strcasecmp(ext, ".html") == 0 || strcasecmp(ext, ".htm") == 0)
         return "text/html";
@@ -51,13 +69,21 @@ const char* get_mime_type(const char* file_path) {
     return "application/octet-stream";
 }
 
+/**
+ * @brief 向客户端发送HTTP响应
+ * @param client_socket 客户端套接字描述符
+ * @param status_code HTTP状态码（如"200 OK"）
+ * @param content_type 内容类型（如"text/html"）
+ * @param body 响应体内容
+ * @param body_length 响应体长度
+ */
 void send_response(int client_socket, const char* status_code, const char* content_type, const char* body, size_t body_length) {
     char response_header[BUFFER_SIZE];
     time_t now = time(NULL);
     char time_str[128];
     strftime(time_str, sizeof(time_str), "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
     
-    int header_len = snprintf(response_header, sizeof(response_header),
+    int header_len = snprintf(response_header, sizeof(response_header), // 返回format字符串的长度
                              "HTTP/1.1 %s\r\n"
                              "Server: tinyhttpd/1.0\r\n"
                              "Date: %s\r\n"
@@ -67,7 +93,7 @@ void send_response(int client_socket, const char* status_code, const char* conte
                              "\r\n",
                              status_code, time_str, content_type, body_length);
     
-    if (header_len < 0 || header_len >= (int)sizeof(response_header)) {
+    if (header_len < 0 || header_len >= (int)sizeof(response_header)) { // 后者说明发生截断
         return;
     }
     
@@ -81,6 +107,11 @@ void send_response(int client_socket, const char* status_code, const char* conte
     }
 }
 
+/**
+ * @brief 向客户端发送错误响应页面
+ * @param client_socket 客户端套接字描述符
+ * @param error_code HTTP错误码（400、404、500、501等）
+ */
 void send_error_response(int client_socket, int error_code) {
     const char* status_message;
     const char* error_html;
@@ -113,6 +144,12 @@ void send_error_response(int client_socket, int error_code) {
     send_response(client_socket, status_code, "text/html", error_html, strlen(error_html));
 }
 
+/**
+ * @brief 对URL编码的字符串进行解码
+ * @param dst 解码后的目标字符串缓冲区
+ * @param src 源URL编码字符串
+ * @param dst_size 目标缓冲区大小
+ */
 void url_decode(char* dst, const char* src, size_t dst_size) {
     char* d = dst;
     const char* s = src;
@@ -132,6 +169,12 @@ void url_decode(char* dst, const char* src, size_t dst_size) {
     *d = '\0';
 }
 
+/**
+ * @brief 处理HTTP GET请求
+ * @param client_socket 客户端套接字描述符
+ * @param request_path 请求的路径
+ * @param root_dir 网站根目录
+ */
 void handle_get_request(int client_socket, const char* request_path, const char* root_dir) {
     char file_path[MAX_PATH_LENGTH];
     char decoded_path[MAX_PATH_LENGTH];
@@ -155,7 +198,7 @@ void handle_get_request(int client_socket, const char* request_path, const char*
         return;
     }
     
-    if (!S_ISREG(file_stat.st_mode)) {
+    if (S_ISREG(file_stat.st_mode) == 0) {
         send_error_response(client_socket, 404);
         return;
     }
@@ -186,6 +229,11 @@ void handle_get_request(int client_socket, const char* request_path, const char*
     free(file_content);
 }
 
+/**
+ * @brief 处理客户端连接的线程函数
+ * @param arg 客户端信息结构体指针
+ * @return void* 返回NULL
+ */
 void* handle_client(void* arg) {
     client_info_t* client_info = (client_info_t*)arg;
     int client_socket = client_info->client_socket;
@@ -241,6 +289,10 @@ void* handle_client(void* arg) {
 
 static volatile sig_atomic_t running = 1;
 
+/**
+ * @brief 信号处理函数，用于优雅关闭服务器
+ * @param sig 捕获的信号（SIGINT或SIGTERM）
+ */
 void signal_handler(int sig) {
     if (sig == SIGINT || sig == SIGTERM) {
         running = 0;
